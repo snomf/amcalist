@@ -478,11 +478,14 @@ app.get('/api/theatres', async (req, res) => {
   if (apiKey && apiKey !== 'undefined' && apiKey !== '') {
     try {
       console.log('Fetching theatres from AMC API using key...');
-      // Build AMC request
+      // Build AMC request with robust browser headers to bypass Cloudflare/WAF bot-blocks
       const response = await fetch('https://api.amctheatres.com/v2/theatres?page-size=50', {
         headers: {
           'X-AMC-Vendor-Key': apiKey,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://developers.amctheatres.com/',
+          'Accept-Language': 'en-US,en;q=0.9'
         }
       });
       if (response.ok) {
@@ -525,7 +528,10 @@ app.get('/api/movies', async (req, res) => {
       const response = await fetch('https://api.amctheatres.com/v2/movies/views/all/active?page-size=50', {
         headers: {
           'X-AMC-Vendor-Key': apiKey,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://developers.amctheatres.com/',
+          'Accept-Language': 'en-US,en;q=0.9'
         }
       });
       if (response.ok) {
@@ -575,7 +581,10 @@ app.get('/api/showtimes', async (req, res) => {
       const response = await fetch(url, {
         headers: {
           'X-AMC-Vendor-Key': apiKey,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://developers.amctheatres.com/',
+          'Accept-Language': 'en-US,en;q=0.9'
         }
       });
       if (response.ok) {
