@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMC A-List Ultimate Filter & Showtime Picker</title>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        amcRed: '#dd1c1a',
+                        amcBlack: '#0a0a0a',
+                        amcGrayDark: '#121212',
+                        amcGrayLight: '#1e1e1e',
+                        amcGold: '#cca43b'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet.js for beautiful maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Custom CSS Styles -->
+    <style>
+        body {
+            background-color: #0a0a0a;
+            color: #f5f5f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2b2b2b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #dd1c1a;
+        }
+        /* Leaflet Map Dark Theme adjustments */
+        .leaflet-container {
+            background: #121212 !important;
+        }
+        .leaflet-tile {
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+        }
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background-color: #1e1e1e !important;
+            color: #f5f5f5 !important;
+            border: 1px solid #333;
+        }
+        .leaflet-popup-content {
+            margin: 12px !important;
+        }
+        /* Glow decorations */
+        .glow-red {
+            box-shadow: 0 0 15px rgba(221, 28, 26, 0.4);
+        }
+        .glow-gold {
+            box-shadow: 0 0 15px rgba(204, 164, 59, 0.4);
+        }
+        /* Virtual seat items */
+        .seat {
+            transition: all 0.2s ease;
+        }
+        .seat-available:hover {
+            background-color: #dd1c1a;
+            transform: scale(1.15);
+        }
+        input[type="range"] {
+            accent-color: #dd1c1a;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-amcBlack border-b border-zinc-800 py-4 px-6 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            <!-- Left: Logo & Branding -->
+            <div class="flex items-center gap-3">
+                <div class="bg-amcRed text-white p-2 rounded-lg font-black text-xl tracking-tighter flex items-center justify-center glow-red">
+                    AMC
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                        A-LIST <span class="text-amcGold font-black text-xs px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 tracking-widest uppercase">Master Picker</span>
+                    </h1>
+                    <p class="text-xs text-zinc-400">The Ultimate Filtered Movie & Showtime Finder</p>
+                </div>
+            </div>
+
+            <!-- Middle: Dynamic Status Badge -->
+            <div class="flex items-center gap-2.5 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-full text-xs">
+                <span id="api-status-indicator" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="api-status-text" class="text-zinc-300 font-medium">Booting App...</span>
+            </div>
+
+            <!-- Right: Live Date Picker -->
+            <div class="flex items-center gap-2">
+                <label for="show-date" class="text-xs font-bold uppercase tracking-wider text-zinc-400"><i class="fa-solid fa-calendar text-amcRed mr-1"></i> Date:</label>
+                <input type="date" id="show-date" class="bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm font-semibold text-white focus:outline-none focus:ring-1 focus:ring-amcRed">
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Grid -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- ================= LEFT COLUMN: FILTERS & MAP (4 Cols) ================= -->
+        <section class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- Map Card -->
+            <div class="bg-amcGrayDark rounded-2xl border border-zinc-800 p-4 shadow-xl flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-amcRed"></i> AMC Locations Map
+                    </h2>
+                    <span id="theatre-count-badge" class="text-xs px-2.5 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-bold">
+                        0 Theatres
+                    </span>
+                </div>
+                
+                <div id="map-container" class="w-full h-[240px] rounded-xl border border-zinc-800 overflow-hidden relative shadow-inner">
+                    <!-- Leaflet map -->
+                </div>
+                
+                <div class="text-xs text-zinc-500 italic flex items-center gap-1">
+                    <i class="fa-solid fa-circle-info text-zinc-600"></i> Click a map pin or select from the dropdown below to set your theatre.
+                </div>
+
+                <!-- Theatre Dropdown Selection -->
+                <div class="flex flex-col gap-1.5 mt-1">
+                    <label for="theatre-select" class="text-xs font-bold text-zinc-400 uppercase tracking-wider">Active AMC Theatre:</label>
+                    <div class="relative">
+                        <select id="theatre-select" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white font-semibold focus:outline-none focus:ring-2 focus:ring-amcRed appearance-none cursor-pointer">
+                            <!-- Options dynamically filled -->
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-zinc-400">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Master Filter Card -->
+            <div class="bg-amcGrayDark rounded-2xl border border-zinc-800 p-5 shadow-xl flex flex-col gap-5">
+                <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-amcRed"></i> A-List Master Filters
+                    </h2>
+                    <button onclick="resetFilters()" class="text-xs text-zinc-500 hover:text-amcRed transition duration-150 font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-rotate-left"></i> Reset
+                    </button>
+                </div>
+
+                <!-- 1. General Time of Day (Specific Requirement!) -->
+                <div class="flex flex-col gap-2">
+                    <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                        Showtime Windows
+                        <span class="text-[10px] text-zinc-500 font-normal">Select multiple</span>
+                    </span>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="toggleTimeWindow('morning')" id="btn-time-morning" class="time-window-btn px-3 py-2 rounded-xl border border-zinc-800 text-xs font-semibold text-zinc-400 hover:text-white hover:border-zinc-700 bg-zinc-900 flex flex-col items-center gap-1 transition">
+                            <span class="text-sm">🌅 Morning</span>
+                            <span class="text-[9px] text-zinc-500 font-normal">Before 12:00 PM</span>
+                        </button>
+                        <button onclick="toggleTimeWindow('afternoon')" id="btn-time-afternoon" class="time-window-btn px-3 py-2 rounded-xl border border-zinc-800 text-xs font-semibold text-zinc-400 hover:text-white hover:border-zinc-700 bg-zinc-900 flex flex-col items-center gap-1 transition">
+                            <span class="text-sm">☀️ Afternoon</span>
+                            <span class="text-[9px] text-zinc-500 font-normal">12:00 PM - 5:00 PM</span>
+                        </button>
+                        <button onclick="toggleTimeWindow('evening')" id="btn-time-evening" class="time-window-btn px-3 py-2 rounded-xl border border-zinc-800 text-xs font-semibold text-zinc-400 hover:text-white hover:border-zinc-700 bg-zinc-900 flex flex-col items-center gap-1 transition">
+                            <span class="text-sm">🌆 Evening</span>
+                            <span class="text-[9px] text-zinc-500 font-normal">5:00 PM - 9:00 PM</span>
+                        </button>
+                        <button onclick="toggleTimeWindow('night')" id="btn-time-night" class="time-window-btn px-3 py-2 rounded-xl border border-zinc-800 text-xs font-semibold text-zinc-400 hover:text-white hover:border-zinc-700 bg-zinc-900 flex flex-col items-center gap-1 transition">
+                            <span class="text-sm">🌙 Night</span>
+                            <span class="text-[9px] text-zinc-500 font-normal">After 9:00 PM</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. Precise Hour Range Slider -->
+                <div class="flex flex-col gap-2">
+                    <div class="flex items-center justify-between text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                        <span>Precise Hour Filter</span>
+                        <span id="hour-range-value" class="text-amcRed text-xs lowercase font-semibold">9:00 am - 11:59 pm</span>
+                    </div>
+                    <div class="flex items-center gap-3 mt-1">
+                        <span class="text-[10px] text-zinc-500 font-bold">9AM</span>
+                        <input type="range" id="hour-min" min="9" max="24" step="0.5" value="9" class="w-full cursor-pointer">
+                        <input type="range" id="hour-max" min="9" max="24" step="0.5" value="24" class="w-full cursor-pointer">
+                        <span class="text-[10px] text-zinc-500 font-bold">12AM</span>
+                    </div>
+                </div>
+
+                <!-- 3. Premium Format Checkboxes -->
+                <div class="flex flex-col gap-2">
+                    <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider">AMC Premium Formats</span>
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <label class="flex items-center gap-2 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-2 rounded-xl cursor-pointer transition">
+                            <input type="checkbox" id="format-imax" class="rounded text-amcRed focus:ring-amcRed" onchange="applyFilters()">
+                            <span class="font-bold text-blue-400"><i class="fa-solid fa-circle-play mr-1"></i> IMAX</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-2 rounded-xl cursor-pointer transition">
+                            <input type="checkbox" id="format-dolby" class="rounded text-amcRed focus:ring-amcRed" onchange="applyFilters()">
+                            <span class="font-bold text-amber-500"><i class="fa-solid fa-volume-high mr-1"></i> Dolby Cinema</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-2 rounded-xl cursor-pointer transition">
+                            <input type="checkbox" id="format-prime" class="rounded text-amcRed focus:ring-amcRed" onchange="applyFilters()">
+                            <span class="font-bold text-rose-500"><i class="fa-solid fa-couch mr-1"></i> PRIME</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-2 rounded-xl cursor-pointer transition">
+                            <input type="checkbox" id="format-reald3d" class="rounded text-amcRed focus:ring-amcRed" onchange="applyFilters()">
+                            <span class="font-bold text-cyan-400"><i class="fa-solid fa-glasses mr-1"></i> RealD 3D</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-2 rounded-xl cursor-pointer transition">
+                            <input type="checkbox" id="format-sensory" class="rounded text-amcRed focus:ring-amcRed" onchange="applyFilters()">
+                            <span class="font-semibold text-teal-400"><i class="fa-solid fa-face-smile mr-1"></i> Sensory</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-2 rounded-xl cursor-pointer transition">
+                            <input type="checkbox" id="format-standard" class="rounded text-amcRed focus:ring-amcRed" onchange="applyFilters()">
+                            <span class="font-semibold text-zinc-300"><i class="fa-solid fa-film mr-1"></i> Standard</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 4. Movie Genre & MPAA Rating -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="flex flex-col gap-1.5">
+                        <label for="filter-genre" class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Genre:</label>
+                        <select id="filter-genre" onchange="applyFilters()" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amcRed cursor-pointer">
+                            <option value="all">All Genres</option>
+                            <option value="ACTION">Action / Thriller</option>
+                            <option value="SCIFI">Sci-Fi / Adventure</option>
+                            <option value="DRAMA">Drama</option>
+                            <option value="COMEDY">Comedy</option>
+                            <option value="MUSICAL">Musical / Fantasy</option>
+                            <option value="ANIMATION">Animation</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <label for="filter-mpaa" class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">MPAA Rating:</label>
+                        <select id="filter-mpaa" onchange="applyFilters()" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amcRed cursor-pointer">
+                            <option value="all">All Ratings</option>
+                            <option value="G">G</option>
+                            <option value="PG">PG</option>
+                            <option value="PG13">PG-13</option>
+                            <option value="R">R</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 5. A-List Eligibility Toggle -->
+                <div class="flex items-center justify-between bg-zinc-900/60 p-3 rounded-xl border border-zinc-800/80">
+                    <div class="flex flex-col">
+                        <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                            <i class="fa-solid fa-star text-amcGold"></i> A-List Eligible Only
+                        </span>
+                        <span class="text-[10px] text-zinc-500">Filters out special, non-standard surcharge presentations</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="alist-toggle" checked onchange="applyFilters()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amcRed peer-checked:after:bg-white"></div>
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= RIGHT COLUMN: MOVIES & SHOWTIMES (7 Cols) ================= -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- Quick Active Theatre Info Card -->
+            <div id="theatre-info-banner" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 id="current-theatre-title" class="text-lg font-black text-white">Select a Theatre</h3>
+                    <p id="current-theatre-address" class="text-xs text-zinc-400 mt-0.5"><i class="fa-solid fa-location-dot text-amcRed mr-1"></i> Please wait, loading details...</p>
+                </div>
+                <div id="current-theatre-amenities" class="flex flex-wrap gap-1">
+                    <!-- Amenities -->
+                </div>
+            </div>
+
+            <!-- Movies List & Showtimes Grid -->
+            <div class="flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-black text-white tracking-tight flex items-center gap-2">
+                        <i class="fa-solid fa-clapperboard text-amcRed"></i> Showtimes & Tickets
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <label for="sort-movies" class="text-xs font-bold text-zinc-500">Sort:</label>
+                        <select id="sort-movies" onchange="applyFilters()" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none cursor-pointer">
+                            <option value="score">Highest Rated</option>
+                            <option value="name">Movie Name (A-Z)</option>
+                            <option value="runtime">Running Time</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Movies dynamic list -->
+                <div id="movies-container" class="flex flex-col gap-5">
+                    <!-- Loaded dynamically -->
+                </div>
+
+                <!-- No Results fallback -->
+                <div id="no-results-view" class="hidden flex flex-col items-center justify-center py-16 text-center bg-amcGrayDark rounded-2xl border border-dashed border-zinc-800 p-8">
+                    <div class="w-16 h-16 rounded-full bg-zinc-950 flex items-center justify-center text-zinc-600 mb-4 text-2xl border border-zinc-800">
+                        <i class="fa-solid fa-video-slash"></i>
+                    </div>
+                    <h4 class="text-base font-bold text-zinc-300">No matching showtimes found</h4>
+                    <p class="text-xs text-zinc-500 max-w-sm mt-1">Try widening your showtime window, checking other premium formats, or choosing a different theatre.</p>
+                    <button onclick="resetFilters()" class="mt-4 bg-zinc-800 hover:bg-amcRed hover:text-white text-zinc-300 font-semibold text-xs px-4 py-2 rounded-lg transition">
+                        Reset All Filters
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Interactive Luxury Seat Selection Modal -->
+    <div id="seat-modal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-amcGrayDark rounded-2xl border border-zinc-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 flex flex-col gap-5 shadow-2xl relative glow-red">
+            
+            <button onclick="closeSeatModal()" class="absolute top-4 right-4 text-zinc-500 hover:text-white transition duration-150 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <!-- Modal Header -->
+            <div class="border-b border-zinc-800 pb-4">
+                <span id="seat-modal-format" class="text-[10px] font-bold text-amcGold tracking-wider uppercase bg-zinc-800 px-2.5 py-1 rounded">Dolby Cinema</span>
+                <h3 id="seat-modal-movie-title" class="text-xl font-black text-white mt-2">Dune: Part Two</h3>
+                <p id="seat-modal-time-desc" class="text-xs text-zinc-400 mt-1">AMC Lincoln Square 13 • Auditorium 4 • 7:15 PM</p>
+            </div>
+
+            <!-- Seat Map Legend -->
+            <div class="flex justify-center items-center gap-6 text-xs bg-zinc-900/50 py-2.5 rounded-xl border border-zinc-800/80">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded bg-zinc-700 inline-block border border-zinc-600"></span>
+                    <span class="text-zinc-400">Available</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded bg-amcRed inline-block border border-red-700"></span>
+                    <span class="text-zinc-200">Selected</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded bg-zinc-950 inline-block border border-zinc-900 text-zinc-700 flex items-center justify-center text-[9px] font-bold">X</span>
+                    <span class="text-zinc-500">Reserved</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded bg-amber-500/20 text-amber-500 inline-block border border-amber-500/40 flex items-center justify-center text-[10px] font-bold"><i class="fa-solid fa-wheelchair"></i></span>
+                    <span class="text-zinc-400">Accessible</span>
+                </div>
+            </div>
+
+            <!-- Curved Screen -->
+            <div class="flex flex-col items-center gap-1.5 my-2">
+                <div class="w-[85%] h-1.5 bg-gradient-to-r from-zinc-800 via-amcRed to-zinc-800 rounded-full shadow-lg"></div>
+                <span class="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">FRONT OF THEATRE • AUDITORIUM SCREEN</span>
+            </div>
+
+            <!-- Seat Grid -->
+            <div id="seat-grid" class="flex flex-col gap-2.5 items-center select-none overflow-x-auto py-4">
+                <!-- Row nodes added by JS -->
+            </div>
+
+            <!-- Seat selection summary & savings details -->
+            <div class="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-4 mt-2 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                    <span class="text-xs text-zinc-500 font-bold uppercase tracking-wider">Seats Selected:</span>
+                    <p id="selected-seats-list" class="text-white font-black text-sm mt-0.5">None Selected</p>
+                    <p class="text-[11px] text-zinc-500 mt-1 flex items-center gap-1">
+                        <i class="fa-solid fa-info-circle text-amcGold"></i> Standard A-List covers up to 3 active reservations.
+                    </p>
+                </div>
+                <div class="flex flex-col items-center md:items-end">
+                    <div class="flex items-baseline gap-1.5">
+                        <span class="text-xs text-zinc-400">A-List Total:</span>
+                        <span id="booking-price" class="text-xl font-extrabold text-amcGold">$0.00</span>
+                    </div>
+                    <span id="booking-savings-badge" class="text-[10px] text-emerald-400 font-bold bg-emerald-950/50 border border-emerald-900 px-2 py-0.5 rounded mt-1">Saved with A-List</span>
+                </div>
+            </div>
+
+            <!-- Modal Action Buttons -->
+            <div class="flex gap-3 mt-1">
+                <button onclick="closeSeatModal()" class="w-1/3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 px-4 rounded-xl transition">
+                    Cancel
+                </button>
+                <button onclick="confirmBooking()" id="btn-confirm-booking" disabled class="w-2/3 bg-zinc-800 text-zinc-600 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition duration-200">
+                    <i class="fa-solid fa-ticket"></i> Reserve on A-List
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Booking Notification -->
+    <div id="booking-toast" class="fixed bottom-6 right-6 bg-zinc-900 border-2 border-emerald-500 rounded-2xl p-4 shadow-2xl flex items-center gap-4 z-50 transform translate-y-24 opacity-0 transition-all duration-300 max-w-sm pointer-events-none">
+        <div class="w-10 h-10 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <div>
+            <h5 class="text-xs font-black text-white uppercase tracking-wider">A-List Reservation Confirmed!</h5>
+            <p id="toast-booking-summary" class="text-[11px] text-zinc-400 mt-0.5">Dune: Part Two • Seat H7, H8</p>
+            <p class="text-[10px] text-zinc-500 mt-0.5 italic">Added to your virtual A-List wallet pass.</p>
+        </div>
+    </div>
+
+    <!-- Footer with Integrated API Key configuration (Moved here as requested!) -->
+    <footer class="bg-amcBlack border-t border-zinc-900 py-8 px-6 mt-12 text-zinc-400">
+        <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8 items-start justify-between">
+            
+            <!-- Left: About info -->
+            <div class="max-w-md">
+                <div class="flex items-center gap-2 text-white font-bold text-sm mb-2">
+                    <div class="bg-amcRed text-white px-1.5 py-0.5 rounded text-xs font-black">AMC</div>
+                    <span>A-List Master Picker</span>
+                </div>
+                <p class="text-xs text-zinc-500 leading-relaxed">
+                    Designed specifically for high-efficiency movie-goers. This website connects with the official AMC Theatres API while incorporating advanced schedule filtering and luxury seat previews.
+                </p>
+                <p class="text-[10px] text-zinc-600 mt-2">
+                    © 2026 AMC A-List Master Picker. Developed for AMC API platforms.
+                </p>
+            </div>
+
+            <!-- Right: Integrated API Key Config Box (As requested!) -->
+            <div class="w-full lg:max-w-md bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 flex flex-col gap-3">
+                <div class="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                    <span class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-key text-amcRed"></i> Official AMC API Configuration
+                    </span>
+                    <span class="text-[9px] text-zinc-500">CORS Secure Proxy Active</span>
+                </div>
+                
+                <p class="text-[10px] text-zinc-500 leading-relaxed">
+                    Input your developer portal key below. If left empty, the application falls back to our flagship simulated AMC locations & movies automatically!
+                </p>
+
+                <div class="flex flex-col gap-1.5 mt-1">
+                    <label for="api-key-input" class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">X-AMC-Vendor-Key</label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="password" id="api-key-input" placeholder="Enter key (e.g. 1234abcd-1234-abcd-...)" class="flex-grow bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-amcRed">
+                        <div class="flex gap-1.5">
+                            <button onclick="clearApiKey()" class="bg-zinc-950 hover:bg-zinc-900 text-zinc-500 hover:text-amcRed px-3 py-2 rounded-xl text-xs font-bold border border-zinc-800 transition">
+                                Clear
+                            </button>
+                            <button onclick="saveApiKey()" class="bg-amcRed hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-lg flex items-center gap-1">
+                                <i class="fa-solid fa-rotate"></i> Sync
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-[10px] text-zinc-500 flex items-center justify-between mt-1">
+                    <a href="https://developers.amctheatres.com" target="_blank" class="text-amcRed hover:underline font-bold"><i class="fa-solid fa-code mr-1"></i> Request Key from AMC Portal</a>
+                    <span class="text-zinc-600 font-medium">Stored Locally inside Browser</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- App Logic Script -->
+    <script>
+        // =========================================================================
+        // Client-side Javascript & Core API Integration Logic
+        // =========================================================================
+
+        let state = {
+            apiKey: localStorage.getItem('amc_vendor_key') || '',
+            theatres: [],
+            movies: [],
+            showtimes: [],
+            activeTheatreId: null,
+            activeDate: '',
+            selectedTimeWindows: [], // 'morning', 'afternoon', 'evening', 'night'
+            preciseHourMin: 9.0,
+            preciseHourMax: 24.0,
+            selectedFormats: {
+                imax: false,
+                dolby: false,
+                prime: false,
+                reald3d: false,
+                sensory: false,
+                standard: false
+            },
+            selectedGenre: 'all',
+            selectedMpaa: 'all',
+            alistOnly: true,
+            sortBy: 'score',
+            
+            // Seat Selection states
+            selectedShowtime: null,
+            selectedSeats: [],
+            
+            // Leaflet Objects
+            map: null,
+            markers: {}
+        };
+
+        // Custom Marker Styles (Glowing map pin)
+        const getCustomMarkerHtml = (isSelected) => `
+            <div class="relative flex items-center justify-center">
+                <div class="absolute w-8 h-8 rounded-full ${isSelected ? 'bg-amcRed/40 animate-ping' : 'bg-zinc-800/20'}"></div>
+                <div class="w-6 h-6 rounded-full border-2 ${isSelected ? 'bg-amcRed border-white scale-110' : 'bg-zinc-950 border-amcRed'} flex items-center justify-center shadow-lg transition duration-200">
+                    <i class="fa-solid fa-film text-[10px] ${isSelected ? 'text-white' : 'text-amcRed'}"></i>
+                </div>
+            </div>
+        `;
+
+        // -------------------------------------------------------------------------
+        // DEFENSIVE NORMALIZERS - Parses responses cleanly, ensuring zero breaks on live API data structures
+        // -------------------------------------------------------------------------
+        
+        function normalizeTheatre(t) {
+            return {
+                id: t.id,
+                name: t.name || t.longName || 'AMC Theatre',
+                longName: t.longName || t.name || 'AMC Theatre',
+                timezone: t.timezone || 'EASTERN TIME',
+                guestServicesPhoneNumber: t.guestServicesPhoneNumber || '',
+                websiteUrl: t.websiteUrl || 'https://www.amctheatres.com',
+                location: {
+                    addressLine1: t.location?.addressLine1 || t.addressLine1 || 'Unknown Address',
+                    city: t.location?.city || t.city || '',
+                    state: t.location?.state || t.state || '',
+                    postalCode: t.location?.postalCode || t.postalCode || '',
+                    latitude: parseFloat(t.location?.latitude || t.latitude || 37.0902),
+                    longitude: parseFloat(t.location?.longitude || t.longitude || -95.7129)
+                },
+                attributes: t.attributes || []
+            };
+        }
+
+        function normalizeMovie(m) {
+            return {
+                id: m.id,
+                name: m.name || m.sortableName || 'Unknown Movie',
+                description: m.description || m.synopsis || 'No description available.',
+                genres: m.genres || (m.genre ? [m.genre] : ['Drama']),
+                genre: m.genre || (m.genres ? m.genres[0] : 'DRAMA'),
+                mpaaRating: m.mpaaRating || 'NR',
+                score: parseFloat(m.score || 0.0),
+                runTime: m.runTime || m.runtime || 120,
+                starringActors: m.starringActors || '',
+                directors: m.directors || '',
+                websiteUrl: m.websiteUrl || 'https://www.amctheatres.com',
+                media: {
+                    posterStandard: m.media?.posterStandard || m.media?.posterDynamic || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=400&q=80',
+                    heroDesktopDynamic: m.media?.heroDesktopDynamic || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80'
+                }
+            };
+        }
+
+        function normalizeShowtime(st) {
+            return {
+                id: st.id,
+                movieId: st.movieId,
+                movieName: st.movieName || 'Unknown Movie',
+                genre: st.genre || 'DRAMA',
+                showDateTimeLocal: st.showDateTimeLocal,
+                isSoldOut: st.isSoldOut || false,
+                isAlmostSoldOut: st.isAlmostSoldOut || false,
+                auditorium: st.auditorium || 1,
+                runTime: st.runTime || 120,
+                mpaaRating: st.mpaaRating || 'NR',
+                premiumFormat: st.premiumFormat || '',
+                purchaseUrl: st.purchaseUrl || '#',
+                attributes: st.attributes || []
+            };
+        }
+
+        // Initialize App
+        document.addEventListener("DOMContentLoaded", () => {
+            // Set current key to input textbox on footer
+            document.getElementById('api-key-input').value = state.apiKey;
+
+            // Setup default dates
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            state.activeDate = `${yyyy}-${mm}-${dd}`;
+            
+            const dateInput = document.getElementById('show-date');
+            dateInput.value = state.activeDate;
+            dateInput.min = state.activeDate; // Don't look at past dates
+            
+            dateInput.addEventListener('change', (e) => {
+                state.activeDate = e.target.value;
+                loadShowtimes();
+            });
+
+            // Hour Range Sliders
+            const minSlider = document.getElementById('hour-min');
+            const maxSlider = document.getElementById('hour-max');
+            
+            minSlider.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value);
+                if (val >= state.preciseHourMax) {
+                    val = state.preciseHourMax - 0.5;
+                    e.target.value = val;
+                }
+                state.preciseHourMin = val;
+                updateHourSliderLabel();
+                applyFilters();
+            });
+
+            maxSlider.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value);
+                if (val <= state.preciseHourMin) {
+                    val = state.preciseHourMin + 0.5;
+                    e.target.value = val;
+                }
+                state.preciseHourMax = val;
+                updateHourSliderLabel();
+                applyFilters();
+            });
+
+            // Dropdown listener
+            document.getElementById('theatre-select').addEventListener('change', (e) => {
+                selectTheatre(parseInt(e.target.value), true);
+            });
+
+            // Map init
+            initMap();
+
+            // Bootstrap loading sequence
+            bootstrapApp();
+        });
+
+        function updateHourSliderLabel() {
+            const formatTime = (val) => {
+                if (val === 24) return '11:59 pm';
+                const isPm = val >= 12;
+                let hour = Math.floor(val);
+                const mins = (val % 1) === 0.5 ? '30' : '00';
+                
+                if (hour > 12) hour -= 12;
+                if (hour === 0) hour = 12;
+                
+                return `${hour}:${mins} ${isPm ? 'pm' : 'am'}`;
+            };
+            
+            const label = document.getElementById('hour-range-value');
+            label.innerText = `${formatTime(state.preciseHourMin)} - ${formatTime(state.preciseHourMax)}`;
+        }
+
+        async function bootstrapApp() {
+            updateApiStatusBadge('loading');
+            
+            // 1. Fetch theatres
+            const rawTheatres = await fetchTheatres();
+            state.theatres = (rawTheatres || []).map(normalizeTheatre);
+            
+            if (state.theatres.length > 0) {
+                populateTheatreDropdown();
+                renderMapMarkers();
+                
+                // Select default
+                state.activeTheatreId = state.theatres[0].id;
+                document.getElementById('theatre-select').value = state.activeTheatreId;
+                updateTheatreBanner(state.theatres[0]);
+            }
+
+            // 2. Fetch movies
+            const rawMovies = await fetchMovies();
+            state.movies = (rawMovies || []).map(normalizeMovie);
+
+            // 3. Load Showtimes for selected theatre
+            if (state.activeTheatreId) {
+                await loadShowtimes();
+            }
+        }
+
+        // -------------------------------------------------------------------------
+        // Live / Mock Data API Layer
+        // -------------------------------------------------------------------------
+
+        function getHeaders() {
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (state.apiKey) {
+                headers['X-AMC-Vendor-Key'] = state.apiKey;
+            }
+            return headers;
+        }
+
+        async function fetchTheatres() {
+            try {
+                const response = await fetch('/api/theatres', { headers: getHeaders() });
+                const data = await response.json();
+                
+                updateApiIndicatorStatus(data);
+                return data.theatres;
+            } catch (err) {
+                console.error('Error fetching theatres:', err);
+                updateApiStatusBadge('error', 'Network Error');
+                return [];
+            }
+        }
+
+        async function fetchMovies() {
+            try {
+                const response = await fetch('/api/movies', { headers: getHeaders() });
+                const data = await response.json();
+                return data.movies;
+            } catch (err) {
+                console.error('Error loading movies:', err);
+                return [];
+            }
+        }
+
+        async function loadShowtimes() {
+            if (!state.activeTheatreId || !state.activeDate) return;
+            
+            // Format to AMC friendly MM-DD-YYYY
+            const dateParts = state.activeDate.split('-');
+            const amcFormattedDate = `${dateParts[1]}-${dateParts[2]}-${dateParts[0]}`;
+
+            renderLoadingState();
+
+            try {
+                const response = await fetch(`/api/showtimes?theatreId=${state.activeTheatreId}&date=${amcFormattedDate}`, {
+                    headers: getHeaders()
+                });
+                const data = await response.json();
+                
+                state.showtimes = (data.showtimes || []).map(normalizeShowtime);
+                applyFilters();
+            } catch (err) {
+                console.error('Error loading showtimes:', err);
+                state.showtimes = [];
+                applyFilters();
+            }
+        }
+
+        // API Key state indicators
+        function updateApiIndicatorStatus(apiResponse) {
+            const indicator = document.getElementById('api-status-indicator');
+            const text = document.getElementById('api-status-text');
+
+            if (apiResponse.source === 'amc-api') {
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]";
+                text.innerText = "🟢 Live AMC API Active";
+            } else if (apiResponse.source === 'amc-api-error' || apiResponse.fallback) {
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]";
+                text.innerText = "⚠️ Key Rejected (Mock Fallback)";
+            } else {
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-zinc-500";
+                text.innerText = "Mock Mode (No Key Needed)";
+            }
+        }
+
+        function updateApiStatusBadge(status, customMsg = '') {
+            const indicator = document.getElementById('api-status-indicator');
+            const text = document.getElementById('api-status-text');
+
+            if (status === 'loading') {
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping";
+                text.innerText = "Syncing with AMC...";
+            } else if (status === 'error') {
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse";
+                text.innerText = customMsg || "Connection Error";
+            }
+        }
+
+        // -------------------------------------------------------------------------
+        // Map Integration
+        // -------------------------------------------------------------------------
+
+        function initMap() {
+            state.map = L.map('map-container', {
+                zoomControl: true,
+                scrollWheelZoom: false
+            }).setView([37.0902, -95.7129], 4);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(state.map);
+        }
+
+        function renderMapMarkers() {
+            Object.keys(state.markers).forEach(k => {
+                state.map.removeLayer(state.markers[k]);
+            });
+            state.markers = {};
+
+            const bounds = [];
+
+            state.theatres.forEach(theatre => {
+                const lat = theatre.location.latitude;
+                const lon = theatre.location.longitude;
+                
+                if (lat && lon && lat !== 0 && lon !== 0) {
+                    const isSelected = (theatre.id === state.activeTheatreId);
+                    
+                    const customIcon = L.divIcon({
+                        html: getCustomMarkerHtml(isSelected),
+                        className: 'custom-leaflet-icon',
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 14]
+                    });
+
+                    const marker = L.marker([lat, lon], { icon: customIcon }).addTo(state.map);
+                    const amenities = theatre.attributes.slice(0, 3).map(a => `<span class="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-amcRed border border-zinc-700 mr-1 inline-block mt-1 font-bold">${a.name}</span>`).join('');
+                    
+                    const popupContent = `
+                        <div class="text-zinc-200">
+                            <h4 class="font-extrabold text-xs text-white">${theatre.name}</h4>
+                            <p class="text-[9px] text-zinc-400 mt-0.5">${theatre.location.addressLine1}, ${theatre.location.city}</p>
+                            <div class="my-1">${amenities}</div>
+                            <button onclick="selectTheatre(${theatre.id}, true); state.map.closePopup();" class="mt-1 w-full bg-amcRed text-white hover:bg-red-600 text-[9px] font-bold py-1 px-2 rounded transition text-center uppercase tracking-wider">
+                                Select Theatre
+                            </button>
+                        </div>
+                    `;
+                    
+                    marker.bindPopup(popupContent);
+                    state.markers[theatre.id] = marker;
+                    bounds.push([lat, lon]);
+                }
+            });
+
+            if (bounds.length > 0) {
+                state.map.fitBounds(bounds, { padding: [30, 30] });
+            }
+        }
+
+        function selectTheatre(theatreId, syncDropdown = false) {
+            state.activeTheatreId = theatreId;
+            const theatre = state.theatres.find(t => t.id === theatreId);
+            
+            if (theatre) {
+                updateTheatreBanner(theatre);
+                
+                if (syncDropdown) {
+                    document.getElementById('theatre-select').value = theatreId;
+                }
+
+                const lat = theatre.location.latitude;
+                const lon = theatre.location.longitude;
+                if (lat && lon && lat !== 0 && lon !== 0) {
+                    state.map.setView([lat, lon], 12);
+                    renderMapMarkers();
+                }
+
+                loadShowtimes();
+            }
+        }
+
+        function updateTheatreBanner(theatre) {
+            document.getElementById('current-theatre-title').innerText = theatre.name;
+            document.getElementById('current-theatre-address').innerHTML = `<i class="fa-solid fa-location-dot text-amcRed mr-1"></i> ${theatre.location.addressLine1}, ${theatre.location.city}, ${theatre.location.state} ${theatre.location.postalCode}`;
+            
+            const bannerAmenities = document.getElementById('current-theatre-amenities');
+            bannerAmenities.innerHTML = '';
+            
+            theatre.attributes.forEach(attr => {
+                const pill = document.createElement('span');
+                pill.className = "text-[9px] font-black uppercase tracking-wider px-2 py-1 bg-zinc-800 text-zinc-300 rounded border border-zinc-700/60";
+                pill.innerText = attr.name;
+                bannerAmenities.appendChild(pill);
+            });
+        }
+
+        function populateTheatreDropdown() {
+            const dropdown = document.getElementById('theatre-select');
+            dropdown.innerHTML = '';
+            
+            state.theatres.forEach(theatre => {
+                const option = document.createElement('option');
+                option.value = theatre.id;
+                option.innerText = `${theatre.name} (${theatre.location.city}, ${theatre.location.state})`;
+                dropdown.appendChild(option);
+            });
+            
+            document.getElementById('theatre-count-badge').innerText = `${state.theatres.length} Theatres`;
+        }
+
+        // -------------------------------------------------------------------------
+        // Core Filtering Engines (The Right Way!)
+        // -------------------------------------------------------------------------
+
+        function toggleTimeWindow(period) {
+            const btn = document.getElementById(`btn-time-${period}`);
+            const index = state.selectedTimeWindows.indexOf(period);
+            
+            if (index > -1) {
+                state.selectedTimeWindows.splice(index, 1);
+                btn.className = "time-window-btn px-3 py-2 rounded-xl border border-zinc-800 text-xs font-semibold text-zinc-400 bg-zinc-900 flex flex-col items-center gap-1 transition hover:text-white";
+            } else {
+                state.selectedTimeWindows.push(period);
+                btn.className = "time-window-btn px-3 py-2 rounded-xl border border-red-600 text-white bg-amcRed glow-red flex flex-col items-center gap-1 transition";
+            }
+            applyFilters();
+        }
+
+        function resetFilters() {
+            state.selectedTimeWindows = [];
+            document.querySelectorAll('.time-window-btn').forEach(btn => {
+                btn.className = "time-window-btn px-3 py-2 rounded-xl border border-zinc-800 text-xs font-semibold text-zinc-400 bg-zinc-900 flex flex-col items-center gap-1 transition hover:text-white";
+            });
+
+            state.preciseHourMin = 9.0;
+            state.preciseHourMax = 24.0;
+            document.getElementById('hour-min').value = 9.0;
+            document.getElementById('hour-max').value = 24.0;
+            updateHourSliderLabel();
+
+            Object.keys(state.selectedFormats).forEach(k => {
+                state.selectedFormats[k] = false;
+                const checkbox = document.getElementById(`format-${k}`);
+                if (checkbox) checkbox.checked = false;
+            });
+
+            state.selectedGenre = 'all';
+            state.selectedMpaa = 'all';
+            state.alistOnly = true;
+            state.sortBy = 'score';
+            
+            document.getElementById('filter-genre').value = 'all';
+            document.getElementById('filter-mpaa').value = 'all';
+            document.getElementById('alist-toggle').checked = true;
+            document.getElementById('sort-movies').value = 'score';
+
+            applyFilters();
+        }
+
+        function applyFilters() {
+            state.selectedGenre = document.getElementById('filter-genre').value;
+            state.selectedMpaa = document.getElementById('filter-mpaa').value;
+            state.alistOnly = document.getElementById('alist-toggle').checked;
+            state.sortBy = document.getElementById('sort-movies').value;
+            
+            Object.keys(state.selectedFormats).forEach(k => {
+                const checkbox = document.getElementById(`format-${k}`);
+                if (checkbox) state.selectedFormats[k] = checkbox.checked;
+            });
+
+            let filteredShowtimes = state.showtimes.filter(showtime => {
+                if (state.selectedGenre !== 'all') {
+                    if (showtime.genre !== state.selectedGenre) return false;
+                }
+
+                if (state.selectedMpaa !== 'all') {
+                    if (showtime.mpaaRating !== state.selectedMpaa) return false;
+                }
+
+                if (state.alistOnly) {
+                    if (showtime.availableForAList === false) return false;
+                    const isSpecialPresentation = showtime.attributes?.some(a => a.code === "SPECIALENGAGEMENTS" || a.code === "FATHOM");
+                    if (isSpecialPresentation) return false;
+                }
+
+                const localTimeStr = showtime.showDateTimeLocal;
+                if (!localTimeStr) return false;
+                const hourPart = parseInt(localTimeStr.split('T')[1].split(':')[0]);
+                const minPart = parseInt(localTimeStr.split('T')[1].split(':')[1]);
+                const decimalHour = hourPart + (minPart / 60);
+
+                if (state.selectedTimeWindows.length > 0) {
+                    let matchedWindow = false;
+                    state.selectedTimeWindows.forEach(window => {
+                        if (window === 'morning' && decimalHour < 12) matchedWindow = true;
+                        if (window === 'afternoon' && decimalHour >= 12 && decimalHour < 17) matchedWindow = true;
+                        if (window === 'evening' && decimalHour >= 17 && decimalHour < 21) matchedWindow = true;
+                        if (window === 'night' && decimalHour >= 21) matchedWindow = true;
+                    });
+                    if (!matchedWindow) return false;
+                }
+
+                if (decimalHour < state.preciseHourMin || decimalHour > state.preciseHourMax) {
+                    return false;
+                }
+
+                const activeFormats = Object.keys(state.selectedFormats).filter(k => state.selectedFormats[k]);
+                if (activeFormats.length > 0) {
+                    let formatMatched = false;
+                    const formatString = (showtime.premiumFormat || "Standard").toLowerCase();
+                    
+                    activeFormats.forEach(fmt => {
+                        if (fmt === 'imax' && (formatString.includes('imax') || showtime.attributes.some(a => a.code.includes('IMAX')))) formatMatched = true;
+                        if (fmt === 'dolby' && (formatString.includes('dolby') || showtime.attributes.some(a => a.code.includes('DOLBY')))) formatMatched = true;
+                        if (fmt === 'prime' && (formatString.includes('prime') || showtime.attributes.some(a => a.code.includes('PRIME')))) formatMatched = true;
+                        if (fmt === 'reald3d' && (formatString.includes('3d') || showtime.attributes.some(a => a.code.includes('REALD3D') || a.code.includes('3D')))) formatMatched = true;
+                        if (fmt === 'sensory' && showtime.attributes.some(a => a.code.includes('SENSORY'))) formatMatched = true;
+                        if (fmt === 'standard' && formatString === 'standard') formatMatched = true;
+                    });
+                    if (!formatMatched) return false;
+                }
+
+                return true;
+            });
+
+            const movieWithShowtimes = [];
+
+            state.movies.forEach(movie => {
+                const movieShowtimes = filteredShowtimes.filter(st => st.movieId === movie.id);
+                if (movieShowtimes.length > 0) {
+                    movieShowtimes.sort((a, b) => new Date(a.showDateTimeLocal) - new Date(b.showDateTimeLocal));
+                    movieWithShowtimes.push({
+                        movie: movie,
+                        showtimes: movieShowtimes
+                    });
+                }
+            });
+
+            if (state.sortBy === 'score') {
+                movieWithShowtimes.sort((a, b) => b.movie.score - a.movie.score);
+            } else if (state.sortBy === 'name') {
+                movieWithShowtimes.sort((a, b) => a.movie.name.localeCompare(b.movie.name));
+            } else if (state.sortBy === 'runtime') {
+                movieWithShowtimes.sort((a, b) => b.movie.runTime - a.movie.runTime);
+            }
+
+            renderMoviesAndShowtimes(movieWithShowtimes);
+        }
+
+        // -------------------------------------------------------------------------
+        // Markup Renderers
+        // -------------------------------------------------------------------------
+
+        function renderLoadingState() {
+            const container = document.getElementById('movies-container');
+            document.getElementById('no-results-view').classList.add('hidden');
+            
+            container.innerHTML = `
+                <div class="animate-pulse flex flex-col gap-5">
+                    ${[1, 2].map(() => `
+                        <div class="bg-amcGrayDark border border-zinc-800 rounded-2xl p-5 flex gap-5">
+                            <div class="w-24 h-36 bg-zinc-800 rounded-xl"></div>
+                            <div class="flex-grow flex flex-col gap-3 justify-center">
+                                <div class="h-6 bg-zinc-800 rounded w-1/3"></div>
+                                <div class="h-4 bg-zinc-800 rounded w-2/3"></div>
+                                <div class="h-4 bg-zinc-800 rounded w-1/4"></div>
+                                <div class="flex gap-2 mt-2">
+                                    <div class="h-8 bg-zinc-800 rounded w-16"></div>
+                                    <div class="h-8 bg-zinc-800 rounded w-16"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderMoviesAndShowtimes(movieGroupList) {
+            const container = document.getElementById('movies-container');
+            const noResults = document.getElementById('no-results-view');
+            container.innerHTML = '';
+
+            if (movieGroupList.length === 0) {
+                noResults.classList.remove('hidden');
+                return;
+            }
+            noResults.classList.add('hidden');
+
+            movieGroupList.forEach(group => {
+                const { movie, showtimes } = group;
+                const movieCard = document.createElement('div');
+                movieCard.className = "bg-amcGrayDark rounded-2xl border border-zinc-800 p-5 shadow-xl hover:border-zinc-700 transition duration-300 flex flex-col md:flex-row gap-5";
+
+                const posterUrl = movie.media?.posterStandard || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=400&q=80';
+                const scoreBadge = movie.score > 0 
+                    ? `<span class="text-xs bg-zinc-800 text-amcGold border border-zinc-700 px-2 py-0.5 rounded font-black flex items-center gap-1"><i class="fa-solid fa-star text-amcGold text-[10px]"></i> ${movie.score}</span>` 
+                    : '';
+                const runTimeDesc = movie.runTime ? `${movie.runTime} min` : '120 min';
+                const ratingBadge = `<span class="text-[10px] font-bold bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded text-zinc-300 uppercase">${movie.mpaaRating || 'NR'}</span>`;
+
+                movieCard.innerHTML = `
+                    <div class="md:w-[120px] w-full flex-shrink-0 flex items-center justify-center">
+                        <img src="${posterUrl}" alt="${movie.name}" class="w-[110px] md:w-full h-[160px] object-cover rounded-xl shadow-lg border border-zinc-800" onerror="this.src='https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=400&q=80'">
+                    </div>
+
+                    <div class="flex-grow flex flex-col justify-between gap-3">
+                        <div>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <h3 class="text-lg font-black text-white hover:text-amcRed transition duration-150 cursor-pointer" onclick="window.open('${movie.websiteUrl || '#'}', '_blank')">
+                                    ${movie.name}
+                                </h3>
+                                <div class="flex items-center gap-1.5">
+                                    ${scoreBadge}
+                                    ${ratingBadge}
+                                </div>
+                            </div>
+                            
+                            <p class="text-xs text-zinc-400 mt-1 line-clamp-2">${movie.description}</p>
+                            
+                            <div class="flex flex-wrap items-center gap-3 text-[11px] text-zinc-500 font-semibold mt-2.5">
+                                <span class="text-zinc-400"><i class="fa-regular fa-clock text-amcRed mr-1"></i> ${runTimeDesc}</span>
+                                <span>•</span>
+                                <span>Dir: ${movie.directors || 'Unknown'}</span>
+                                <span>•</span>
+                                <span class="text-zinc-400">Cast: ${movie.starringActors ? movie.starringActors.split(',').slice(0, 3).join(', ') : 'Unknown'}</span>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-zinc-800/80 pt-3">
+                            <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2"><i class="fa-solid fa-clock-rotate-left text-zinc-600 mr-1"></i> Available Filtered Times:</span>
+                            
+                            <div class="flex flex-wrap gap-2">
+                                ${showtimes.map(st => {
+                                    const showTimeLocal = new Date(st.showDateTimeLocal);
+                                    let hours = showTimeLocal.getHours();
+                                    const minutes = String(showTimeLocal.getMinutes()).padStart(2, '0');
+                                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                                    hours = hours % 12 || 12;
+                                    const formattedTime = `${hours}:${minutes} ${ampm}`;
+
+                                    const hasPremium = st.premiumFormat ? true : false;
+                                    const premiumBadgeClass = hasPremium 
+                                        ? st.premiumFormat.includes('IMAX') 
+                                            ? 'border-blue-500 text-blue-400 hover:bg-blue-950/20' 
+                                            : st.premiumFormat.includes('Dolby') 
+                                                ? 'border-amber-500 text-amber-500 hover:bg-amber-950/20' 
+                                                : 'border-rose-500 text-rose-400 hover:bg-rose-950/20'
+                                        : 'border-zinc-800 text-zinc-300 hover:border-zinc-600';
+
+                                    const formatTag = hasPremium ? `<span class="absolute -top-1.5 -right-1 text-[8px] px-1 bg-zinc-950 rounded border border-zinc-700 font-extrabold">${st.premiumFormat.split(' ')[0]}</span>` : '';
+
+                                    return `
+                                        <button onclick="openSeatModal(${st.id})" 
+                                            class="relative px-3.5 py-2.5 rounded-xl border text-xs font-bold transition flex flex-col items-center gap-0.5 min-w-[76px] cursor-pointer ${premiumBadgeClass}">
+                                            <span>${formattedTime}</span>
+                                            <span class="text-[9px] text-zinc-500 font-semibold uppercase">Aud ${st.auditorium}</span>
+                                            ${formatTag}
+                                        </button>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(movieCard);
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // Luxury Seat Selector Controls
+        // -------------------------------------------------------------------------
+
+        function openSeatModal(showtimeId) {
+            const showtime = state.showtimes.find(st => st.id === showtimeId);
+            if (!showtime) return;
+
+            state.selectedShowtime = showtime;
+            state.selectedSeats = [];
+
+            document.getElementById('seat-modal-format').innerText = showtime.premiumFormat || 'Standard Digital';
+            document.getElementById('seat-modal-format').className = `text-[10px] font-black tracking-wider uppercase bg-zinc-800 px-2.5 py-1 rounded border ${
+                showtime.premiumFormat.includes('IMAX') ? 'text-blue-400 border-blue-900 bg-blue-950/20' :
+                showtime.premiumFormat.includes('Dolby') ? 'text-amber-500 border-amber-900 bg-amber-950/20' :
+                showtime.premiumFormat.includes('PRIME') ? 'text-rose-400 border-rose-900 bg-rose-950/20' : 'text-zinc-400 border-zinc-700'
+            }`;
+            
+            document.getElementById('seat-modal-movie-title').innerText = showtime.movieName;
+            
+            const dateObj = new Date(showtime.showDateTimeLocal);
+            const dateStrFormatted = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            let hrs = dateObj.getHours();
+            const mins = String(dateObj.getMinutes()).padStart(2, '0');
+            const ap = hrs >= 12 ? 'PM' : 'AM';
+            hrs = hrs % 12 || 12;
+            
+            document.getElementById('seat-modal-time-desc').innerText = `AMC Theatre • Auditorium ${showtime.auditorium} • ${dateStrFormatted} at ${hrs}:${mins} ${ap}`;
+
+            renderSeatGrid(showtime);
+            updateSeatSummary();
+
+            document.getElementById('seat-modal').classList.remove('hidden');
+        }
+
+        function closeSeatModal() {
+            document.getElementById('seat-modal').classList.add('hidden');
+        }
+
+        function renderSeatGrid(showtime) {
+            const gridContainer = document.getElementById('seat-grid');
+            gridContainer.innerHTML = '';
+
+            const rows = ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'];
+            const cols = 14;
+            const seed = showtime.id;
+
+            rows.forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = "flex items-center gap-2.5 md:gap-3";
+
+                const rowLabelLeft = document.createElement('span');
+                rowLabelLeft.className = "w-4 text-xs font-black text-zinc-600 text-center";
+                rowLabelLeft.innerText = row;
+                rowDiv.appendChild(rowLabelLeft);
+
+                for (let col = 1; col <= cols; col++) {
+                    if (col === 4 || col === 12) {
+                        const aisle = document.createElement('div');
+                        aisle.className = "w-4 md:w-6";
+                        rowDiv.appendChild(aisle);
+                    }
+
+                    const seatId = `${row}${col}`;
+                    const seatButton = document.createElement('button');
+                    
+                    const isWheelchair = (row === 'A' && (col === 5 || col === 11));
+                    const seedVal = (row.charCodeAt(0) * col * seed) % 100;
+                    const isReserved = !isWheelchair && (seedVal < 45);
+
+                    if (isReserved) {
+                        seatButton.className = "seat w-6 h-6 md:w-7 md:h-7 rounded-t bg-zinc-950 border border-zinc-900 text-[8px] font-black text-zinc-800 cursor-not-allowed flex items-center justify-center";
+                        seatButton.innerText = "X";
+                        seatButton.disabled = true;
+                    } else if (isWheelchair) {
+                        seatButton.className = "seat w-6 h-6 md:w-7 md:h-7 rounded-t bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/30 text-amber-500 cursor-pointer flex items-center justify-center text-xs";
+                        seatButton.innerHTML = `<i class="fa-solid fa-wheelchair text-[10px]"></i>`;
+                        seatButton.onclick = () => toggleSeatSelection(seatId);
+                    } else {
+                        seatButton.className = "seat w-6 h-6 md:w-7 md:h-7 rounded-t bg-zinc-800 border border-zinc-700 hover:border-zinc-500 cursor-pointer flex items-center justify-center text-[9px] font-bold text-zinc-400 seat-available";
+                        seatButton.innerText = col;
+                        seatButton.onclick = () => toggleSeatSelection(seatId);
+                    }
+
+                    seatButton.id = `seat-btn-${seatId}`;
+                    rowDiv.appendChild(seatButton);
+                }
+
+                const rowLabelRight = document.createElement('span');
+                rowLabelRight.className = "w-4 text-xs font-black text-zinc-600 text-center";
+                rowLabelRight.innerText = row;
+                rowDiv.appendChild(rowLabelRight);
+
+                gridContainer.appendChild(rowDiv);
+            });
+        }
+
+        function toggleSeatSelection(seatId) {
+            const index = state.selectedSeats.indexOf(seatId);
+            const btn = document.getElementById(`seat-btn-${seatId}`);
+            
+            if (index > -1) {
+                state.selectedSeats.splice(index, 1);
+                if (seatId.startsWith('A') && (seatId.endsWith('5') || seatId.endsWith('11'))) {
+                    btn.className = "seat w-6 h-6 md:w-7 md:h-7 rounded-t bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/30 text-amber-500 cursor-pointer flex items-center justify-center text-xs";
+                } else {
+                    btn.className = "seat w-6 h-6 md:w-7 md:h-7 rounded-t bg-zinc-800 border border-zinc-700 hover:border-zinc-500 cursor-pointer flex items-center justify-center text-[9px] font-bold text-zinc-400 seat-available";
+                }
+            } else {
+                if (state.selectedSeats.length >= 3) {
+                    alert("A-List memberships can reserve up to a maximum of 3 concurrent seats per session.");
+                    return;
+                }
+                
+                state.selectedSeats.push(seatId);
+                btn.className = "seat w-6 h-6 md:w-7 md:h-7 rounded-t bg-amcRed border border-red-500 text-white font-extrabold text-[10px] cursor-pointer flex items-center justify-center glow-red scale-110";
+            }
+
+            updateSeatSummary();
+        }
+
+        function updateSeatSummary() {
+            const listLabel = document.getElementById('selected-seats-list');
+            const confirmBtn = document.getElementById('btn-confirm-booking');
+            const priceLabel = document.getElementById('booking-price');
+            const savingsLabel = document.getElementById('booking-savings-badge');
+
+            if (state.selectedSeats.length === 0) {
+                listLabel.innerText = "None Selected";
+                confirmBtn.disabled = true;
+                confirmBtn.className = "w-2/3 bg-zinc-800 cursor-not-allowed text-zinc-600 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition";
+                priceLabel.innerText = "$0.00";
+                savingsLabel.classList.add('hidden');
+            } else {
+                listLabel.innerText = state.selectedSeats.join(', ');
+                confirmBtn.disabled = false;
+                confirmBtn.className = "w-2/3 bg-amcRed hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition glow-red cursor-pointer";
+                
+                priceLabel.innerText = "$0.00";
+                
+                const ticketBase = 16.50;
+                let upcharge = 0.00;
+                if (state.selectedShowtime.premiumFormat) {
+                    if (state.selectedShowtime.premiumFormat.includes('IMAX')) upcharge = 4.50;
+                    else if (state.selectedShowtime.premiumFormat.includes('Dolby')) upcharge = 5.00;
+                    else if (state.selectedShowtime.premiumFormat.includes('PRIME')) upcharge = 3.50;
+                }
+                const totalSaved = (ticketBase + upcharge) * state.selectedSeats.length;
+
+                savingsLabel.innerText = `Saved $${totalSaved.toFixed(2)} with A-List!`;
+                savingsLabel.classList.remove('hidden');
+            }
+        }
+
+        function confirmBooking() {
+            if (state.selectedSeats.length === 0) return;
+
+            const summary = `${state.selectedShowtime.movieName} • Seats: ${state.selectedSeats.join(', ')}`;
+            document.getElementById('toast-booking-summary').innerText = summary;
+
+            closeSeatModal();
+
+            const toast = document.getElementById('booking-toast');
+            toast.className = "fixed bottom-6 right-6 bg-zinc-900 border-2 border-emerald-500 rounded-2xl p-4 shadow-2xl flex items-center gap-4 z-50 transform translate-y-0 opacity-100 transition-all duration-500 max-w-sm pointer-events-auto";
+            
+            setTimeout(() => {
+                toast.className = "fixed bottom-6 right-6 bg-zinc-900 border-2 border-emerald-500 rounded-2xl p-4 shadow-2xl flex items-center gap-4 z-50 transform translate-y-24 opacity-0 transition-all duration-500 max-w-sm pointer-events-none";
+            }, 5000);
+        }
+
+        // -------------------------------------------------------------------------
+        // API Key actions (Triggered directly on footer, as requested!)
+        // -------------------------------------------------------------------------
+
+        function saveApiKey() {
+            const inputField = document.getElementById('api-key-input');
+            const key = inputField.value.trim();
+            
+            state.apiKey = key;
+            localStorage.setItem('amc_vendor_key', key);
+            
+            bootstrapApp();
+        }
+
+        function clearApiKey() {
+            state.apiKey = '';
+            localStorage.removeItem('amc_vendor_key');
+            document.getElementById('api-key-input').value = '';
+            
+            bootstrapApp();
+        }
+    </script>
+</body>
+</html>

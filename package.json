@@ -1,0 +1,13 @@
+{
+  "name": "amc-alist-picker",
+  "version": "1.0.0",
+  "description": "An AMC A-List Movie and Showtime Finder with Advanced Filtering and Map Integration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
