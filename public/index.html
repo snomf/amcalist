@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AMC A-List Ultimate Filter & Showtime Picker</title>
     
+    <!-- Console Warning Filter script to suppress Tailwind CSS CDN development warning -->
+    <script>
+        (function() {
+            const originalWarn = console.warn;
+            console.warn = function(...args) {
+                if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
+                    return; // Suppress quietly to keep the production console beautiful
+                }
+                originalWarn.apply(console, args);
+            };
+        })();
+    </script>
+    
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -441,7 +454,7 @@
             </div>
 
             <!-- Right: Integrated API Key Config Box (As requested!) -->
-            <div class="w-full lg:max-w-md bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 flex flex-col gap-3">
+            <form onsubmit="event.preventDefault(); saveApiKey();" class="w-full lg:max-w-md bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 flex flex-col gap-3">
                 <div class="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                     <span class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                         <i class="fa-solid fa-key text-amcRed"></i> Official AMC API Configuration
@@ -456,12 +469,12 @@
                 <div class="flex flex-col gap-1.5 mt-1">
                     <label for="api-key-input" class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">X-AMC-Vendor-Key</label>
                     <div class="flex flex-col sm:flex-row gap-2">
-                        <input type="password" id="api-key-input" placeholder="Enter key (e.g. 1234abcd-1234-abcd-...)" class="flex-grow bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-amcRed">
+                        <input type="password" id="api-key-input" name="apiKeyInput" autocomplete="current-password" placeholder="Enter key (e.g. 1234abcd-1234-abcd-...)" class="flex-grow bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-amcRed">
                         <div class="flex gap-1.5">
-                            <button onclick="clearApiKey()" class="bg-zinc-950 hover:bg-zinc-900 text-zinc-500 hover:text-amcRed px-3 py-2 rounded-xl text-xs font-bold border border-zinc-800 transition">
+                            <button type="button" onclick="clearApiKey()" class="bg-zinc-950 hover:bg-zinc-900 text-zinc-500 hover:text-amcRed px-3 py-2 rounded-xl text-xs font-bold border border-zinc-800 transition">
                                 Clear
                             </button>
-                            <button onclick="saveApiKey()" class="bg-amcRed hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-lg flex items-center gap-1">
+                            <button type="submit" class="bg-amcRed hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-lg flex items-center gap-1">
                                 <i class="fa-solid fa-rotate"></i> Sync
                             </button>
                         </div>
@@ -472,7 +485,7 @@
                     <a href="https://developers.amctheatres.com" target="_blank" class="text-amcRed hover:underline font-bold"><i class="fa-solid fa-code mr-1"></i> Request Key from AMC Portal</a>
                     <span class="text-zinc-600 font-medium">Stored Locally inside Browser</span>
                 </div>
-            </div>
+            </form>
         </div>
     </footer>
 
@@ -1347,5 +1360,5 @@
             bootstrapApp();
         }
     </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1278a3b5ee4c2ef',t:'MTc4MjU5NTY5MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
