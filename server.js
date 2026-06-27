@@ -492,7 +492,8 @@ app.get('/api/theatres', async (req, res) => {
       } else {
         const errorText = await response.text();
         console.warn('AMC API returned error status:', response.status, errorText);
-        return res.status(response.status).json({
+        // Return 200 status with fallback: true so browser console doesn't log a scary 403 Forbidden!
+        return res.status(200).json({
           source: 'amc-api-error',
           error: `AMC API returned ${response.status}`,
           details: errorText,
@@ -502,7 +503,7 @@ app.get('/api/theatres', async (req, res) => {
       }
     } catch (err) {
       console.error('Error connecting to AMC theatres API:', err.message);
-      return res.status(500).json({
+      return res.status(200).json({
         source: 'proxy-exception',
         error: err.message,
         fallback: true,
@@ -534,7 +535,7 @@ app.get('/api/movies', async (req, res) => {
       } else {
         const errorText = await response.text();
         console.warn('AMC Movie API returned error:', response.status, errorText);
-        return res.status(response.status).json({
+        return res.status(200).json({
           source: 'amc-api-error',
           error: `AMC Movie API returned ${response.status}`,
           fallback: true,
@@ -543,7 +544,7 @@ app.get('/api/movies', async (req, res) => {
       }
     } catch (err) {
       console.error('Exception fetching movies:', err.message);
-      return res.status(500).json({
+      return res.status(200).json({
         source: 'proxy-exception',
         error: err.message,
         fallback: true,
@@ -565,11 +566,7 @@ app.get('/api/showtimes', async (req, res) => {
   }
 
   // Format date correctly. AMC API accepts M-D-YYYY or MM-DD-YYYY or YYYY-MM-DD
-  // Let's standardise it
   let formattedDate = date; 
-  if (date.includes('-')) {
-    // If it's YYYY-MM-DD, some parts of AMC api might prefer standard formats, we pass as is or format.
-  }
 
   if (apiKey && apiKey !== 'undefined' && apiKey !== '') {
     try {
@@ -588,9 +585,8 @@ app.get('/api/showtimes', async (req, res) => {
       } else {
         const errorText = await response.text();
         console.warn(`AMC Showtimes API returned error: ${response.status}`, errorText);
-        // Fallback generator for this specific theatre
         const fallbackShowtimes = generateShowtimesForTheatreAndDate(theatreId, date);
-        return res.status(response.status).json({
+        return res.status(200).json({
           source: 'amc-api-error',
           error: `AMC API returned ${response.status}`,
           fallback: true,
@@ -600,7 +596,7 @@ app.get('/api/showtimes', async (req, res) => {
     } catch (err) {
       console.error('Exception fetching showtimes:', err.message);
       const fallbackShowtimes = generateShowtimesForTheatreAndDate(theatreId, date);
-      return res.status(500).json({
+      return res.status(200).json({
         source: 'proxy-exception',
         error: err.message,
         fallback: true,
@@ -619,10 +615,14 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start listening
-app.listen(PORT, () => {
-  console.log(`================================================================`);
-  console.log(`🍿 AMC A-List Master Picker listening at http://localhost:${PORT}`);
-  console.log(`🍿 Loaded Flagship Mock Theatres, Mock Movies and Showtime Engine!`);
-  console.log(`================================================================`);
-});
+// Start listening or export for Vercel Serverless
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`================================================================`);
+    console.log(`🍿 AMC A-List Master Picker listening at http://localhost:${PORT}`);
+    console.log(`🍿 Loaded Flagship Mock Theatres, Mock Movies and Showtime Engine!`);
+    console.log(`================================================================`);
+  });
+}
+
+module.exports = app;
